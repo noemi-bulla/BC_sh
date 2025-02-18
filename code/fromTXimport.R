@@ -8,6 +8,8 @@ library(edgeR)
 library(tibble)
 library(ggplot2)
 library(ggfortify)
+library(limma)
+library(openxlsx)
 
 sample<- factor(c("PT_shSCR_1","PT_shSCR_2","PT_shSCR_3",
                                   "PT_shSCR_4","PT_shSCR_5","PT_shPAEP1_1",
@@ -56,8 +58,6 @@ counts<- dds@assays@data@listData[["counts"]]
 
 gene_id_to_name <- tx2gene %>% distinct(gene_id, gene_name) %>% column_to_rownames("gene_id")
 rownames(counts) <- gene_id_to_name[rownames(counts), "gene_name"]
-
-# Check for NA values (some gene_ids may not have a corresponding gene_name)
 counts <- counts[!is.na(rownames(counts)), ]
 
 y <- DGEList(counts = counts, group = condition)
@@ -69,7 +69,7 @@ y<- calcNormFactors(y)
 
 ### PCA ### 
 cv_function <- function(x) {
-  if (abs(mean(x)) <= 1e-8) return(0)  
+  if (abs(mean(x)) <= 1e-18) return(0)  
   return(sd(x) / mean(x))
 }
 st_var <- function(x) {
@@ -79,74 +79,147 @@ st_var <- function(x) {
 
 logCPM <- t(cpm(y, log=TRUE, prior.count = 2))
 logCPM_t<- t(logCPM)
-
-cv_values_cpm <- apply(logCPM, 2, cv_function)
-cv_results_cpm <- data.frame(gene = colnames(logCPM), CV = cv_values_cpm)
-top_cv_genes_cpm <- cv_results_cpm[order(-cv_results_cpm$CV), ][1:1000, ]  
-pca_df_subset_cpm <- logCPM[, top_cv_genes_cpm$gene, drop=FALSE]  
-
-st_var_values_cpm <- apply(pca_df_subset_cpm, 2, st_var)
-corrected_logCPM_t<- t(corrected_logCPM)
-pca<-prcomp(corrected_logCPM_t, scale. = TRUE)
-
-autoplot(pca, data = data.frame(Group = condition), colour = "Group") + 
-  ggtitle("PCA of RNA-seq Samples") +
-  theme_minimal()
-
-pc1_values <- pca$x[,1]
-num_reads<-colSums(y$counts)
-
+num_reads<- colSums(y$counts)
 cell_cycle_reads <- logCPM_t[rownames(logCPM_t) %in% cell_cycle, ]
 mean_cell_cycle_reads <- colMeans(cell_cycle_reads, na.rm=TRUE)
 
-cor_pc1_cellcycle <- cor(pc1_values, mean_cell_cycle_reads, method="pearson")
-cor_pc1_totalreads <- cor(pc1_values, num_reads, method="pearson")
-batch <- factor(c(rep("PT_shSCR", 5), rep("PT_shPAEP1", 5), rep("PT_shPAEP2", 4)))
-batch <- sample
-covariates <- data.frame(total_reads=num_reads, cell_cycle=mean_cell_cycle_reads)
-corrected_logCPM <- ComBat(dat=logCPM_t, batch=batch, mod=model.matrix(~ cell_cycle))
-corrected_logCPM_num_reads <- ComBat(dat=logCPM_t, batch=, mod=model.matrix(~ total_reads, data=covariates))
-subset_cc<- logCPM_t[rownames(logCPM_t) %in% cell_cycle, ]
-mean_expression <- colMeans(subset_cc)
-
+### no correction ###
 cv_values_cpm <- apply(logCPM, 2, cv_function)
 cv_results_cpm <- data.frame(gene = colnames(logCPM), CV = cv_values_cpm)
-top_cv_genes_cpm <- cv_results_cpm[order(-cv_results_cpm$CV), ][1:1000, ]  
+top_cv_genes_cpm <- cv_results_cpm[order(-cv_results_cpm$CV), ][1:5000, ]  
 pca_df_subset_cpm <- logCPM[, top_cv_genes_cpm$gene, drop=FALSE]  
 
 st_var_values_cpm <- apply(pca_df_subset_cpm, 2, st_var)
 
-column_variances <- apply(st_var_values_cpm, 2, var)
-column_measn<- colMeans(st_var_values_cpm)
+pca<-prcomp(st_var_values_cpm, scale. = TRUE)
+pc1_values<-pca$x[,1]
+cor_pc1_cellcycle <- cor(pc1_values, mean_cell_cycle_reads, method="pearson")
+cor_pc1_totalreads <- cor(pc1_values, num_reads, method="pearson")
+pca_df <- as.data.frame(pca$x)
 
-num_reads<- colSums(y$counts)
-
-pca <- prcomp(st_var_values_cpm, scale = TRUE)
-glimpse(pca)
-pc1_scores<-pca$x[,1]
-
-
-pairwise_correlation <- data.frame(
-  PCA_Score = pc1_scores,
-  cell_cycle_mean = mean_expression,
-  Correlation = cor(pca$x[,1], mean_expression)
-)
-
-print(pairwise_correlation)
-
-###combat ###
-covariates <- data.frame(
-  Tot_Reads = num_reads,      
-  Mean_Expression = mean_expression
-)
-rownames(covariates) <- colnames(logCPM_t)
-mod_matrix <- model.matrix(~ Tot_Reads + Mean_Expression, data = covariates)
-combat_adjusted <- ComBat(dat = logCPM_t, batch = NULL, mod = modcombat)
-
-pca_plot<-ggplot(pca, aes(x = PC1, y = PC2, color = condition)) +
+pca_plot<-ggplot(pca_df, aes(x = PC1, y = PC2, color = condition)) +
   geom_point(size = 3) +  
-  ggtitle("PCA of RNA-seq Samples") +
-  theme_bw()
+  ggtitle("PCA of RNA-seq Samples : 5000") +
+  theme_bw() +
+  annotate("text", x = max(pca_df$PC1), y = max(pca_df$PC2),
+           label = paste("PC1 vs Cell Cycle Correlation: ",
+                         round(cor_pc1_cellcycle, 2)),
+           hjust = 1, vjust = 1, size = 5, color = "black") + 
+  annotate("text", x = max(pca_df$PC1), y = max(pca_df$PC2) - 2,
+           label = paste("PC1 vs Total Reads Correlation: ",
+                         round(cor_pc1_totalreads, 2)),
+           hjust = 1, vjust = 1, size = 5, color = "black")
+
+ggsave(filename = "/Users/ieo7295/Desktop/BC_sh/results/pca_plot/pca_5000_2.png", plot=pca_plot,width= 9, height= 6,dpi=300)
+
+
+### regression num_reads
+remove_num_reads_effect <- function(gene_expr) {
+  model <- lm(gene_expr ~ num_reads)
+  residuals(model)  
+}
+
+corrected_logCPM_num <- apply(logCPM, 2, remove_num_reads_effect)
+cv_values_cpm <- apply(corrected_logCPM_num, 2, cv_function)
+cv_results_cpm <- data.frame(gene = colnames(logCPM), CV = cv_values_cpm)
+top_cv_genes_cpm <- cv_results_cpm[order(-cv_results_cpm$CV), ][4000:5000, ]  
+pca_df_subset_cpm <- logCPM[, top_cv_genes_cpm$gene, drop=FALSE]  
+
+st_var_values_cpm <- apply(pca_df_subset_cpm, 2, st_var)
+
+pca<-prcomp(st_var_values_cpm, scale. = TRUE)
+pc1_values<-pca$x[,1]
+cor_pc1_cellcycle <- cor(pc1_values, mean_cell_cycle_reads, method="pearson")
+cor_pc1_totalreads <- cor(pc1_values, num_reads, method="pearson")
+pca_df <- as.data.frame(pca$x)
+
+pca_plot<-ggplot(pca_df, aes(x = PC1, y = PC2, color = condition)) +
+  geom_point(size = 3) +  
+  ggtitle("PCA of RNA-seq Samples : 4000") +
+  theme_bw() +
+  annotate("text", x = max(pca_df$PC1), y = max(pca_df$PC2),
+           label = paste("PC1 vs Cell Cycle Correlation: ",
+                         round(cor_pc1_cellcycle, 2)),
+           hjust = 1, vjust = 1, size = 5, color = "black") + 
+  annotate("text", x = max(pca_df$PC1), y = max(pca_df$PC2) - 2,
+           label = paste("PC1 vs Total Reads Correlation: ",
+                         round(cor_pc1_totalreads, 2)),
+           hjust = 1, vjust = 1, size = 5, color = "black")
+
+ggsave(filename = "/Users/ieo7295/Desktop/BC_sh/results/pca_plot/pca_5000num_reads.png", plot=pca_plot,width= 9, height= 6,dpi=300)
+
+### regression cell_cycle ###
+remove_cell_cycle_effect <- function(gene_expr) {
+  model <- lm(gene_expr ~ mean_cell_cycle_reads)
+  residuals(model)  
+}
+
+corrected_logCPM <- apply(logCPM, 2, remove_cell_cycle_effect)
+cv_values_cpm <- apply(corrected_logCPM, 2, cv_function)
+cv_results_cpm <- data.frame(gene = colnames(logCPM), CV = cv_values_cpm)
+top_cv_genes_cpm <- cv_results_cpm[order(-cv_results_cpm$CV), ][4000:5000, ]  
+pca_df_subset_cpm <- logCPM[, top_cv_genes_cpm$gene, drop=FALSE]  
+
+st_var_values_cpm <- apply(pca_df_subset_cpm, 2, st_var)
+
+pca<-prcomp(st_var_values_cpm, scale. = TRUE)
+pc1_values<-pca$x[,1]
+cor_pc1_cellcycle <- cor(pc1_values, mean_cell_cycle_reads, method="pearson")
+cor_pc1_totalreads <- cor(pc1_values, num_reads, method="pearson")
+pca_df <- as.data.frame(pca$x)
+
+pca_plot<-ggplot(pca_df, aes(x = PC1, y = PC2, color = condition)) +
+  geom_point(size = 3) +  
+  ggtitle("PCA of RNA-seq Samples : 5000") +
+  theme_bw() +
+  annotate("text", x = max(pca_df$PC1), y = max(pca_df$PC2),
+           label = paste("PC1 vs Cell Cycle Correlation: ",
+                         round(cor_pc1_cellcycle, 2)),
+           hjust = 1, vjust = 1, size = 5, color = "black") + 
+  annotate("text", x = max(pca_df$PC1), y = max(pca_df$PC2) - 2,
+           label = paste("PC1 vs Total Reads Correlation: ",
+                         round(cor_pc1_totalreads, 2)),
+           hjust = 1, vjust = 1, size = 5, color = "black")
+
+ggsave(filename = "/Users/ieo7295/Desktop/BC_sh/results/pca_plot/pca_5000_cell_cycle.png", plot=pca_plot,width= 9, height= 6,dpi=300)
+
+
+### combat ###
+num_reads_scaled <- scale(num_reads)
+mod <- model.matrix(~ num_reads_scaled + mean_cell_cycle_reads)
+batch <- factor(c(rep("PT_shSCR", 5), rep("PT_shPAEP1", 5), rep("PT_shPAEP2", 4)))
+corrected_logCPM <- ComBat(dat = as.matrix(logCPM_t), batch = batch , mod = mod)
+
+corrected_logCPM_t<-t(corrected_logCPM)
+cv_values_cpm <- apply(corrected_logCPM_t, 2, cv_function)
+
+cv_results_cpm <- data.frame(gene = colnames(logCPM), CV = cv_values_cpm)
+top_cv_genes_cpm <- cv_results_cpm[order(-cv_results_cpm$CV), ][4000:5000, ]  
+pca_df_subset_cpm <- logCPM[, top_cv_genes_cpm$gene, drop=FALSE]  
+
+st_var_values_cpm <- apply(pca_df_subset_cpm, 2, st_var)
+
+
+pca<-prcomp(st_var_values_cpm, scale. = TRUE)
+pc1_values<-pca$x[,1]
+cor_pc1_cellcycle <- cor(pc1_values, mean_cell_cycle_reads, method="pearson")
+cor_pc1_totalreads <- cor(pc1_values, num_reads, method="pearson")
+pca_df <- as.data.frame(pca$x)
+
+pca_plot<-ggplot(pca_df, aes(x = PC1, y = PC2, color = condition)) +
+  geom_point(size = 3) +  
+  ggtitle("PCA of RNA-seq Samples : 5000") +
+  theme_bw() +
+  annotate("text", x = max(pca_df$PC1), y = max(pca_df$PC2),
+           label = paste("PC1 vs Cell Cycle Correlation: ",
+                         round(cor_pc1_cellcycle, 2)),
+           hjust = 1, vjust = 1, size = 5, color = "black") + 
+  annotate("text", x = max(pca_df$PC1), y = max(pca_df$PC2) - 2,
+           label = paste("PC1 vs Total Reads Correlation: ",
+                         round(cor_pc1_totalreads, 2)),
+           hjust = 1, vjust = 1, size = 5, color = "black")
+
+ggsave(filename = "/Users/ieo7295/Desktop/BC_sh/results/pca_plot/pca_5000_combat.png", plot=pca_plot,width= 9, height= 6,dpi=300)
 
 
 ### DE edgeR ###
@@ -168,16 +241,6 @@ ttt<- ttt %>% arrange(desc(logFC))
 ### PAEP1 vs PAEP2 ### 
 y_3 <- DGEList(counts = counts, group = condition)
 
-### change ensg name ###
-gene_annot<- data.frame(
-  ensg = be@elementMetadata@listData[["gene_id"]], 
-  genename = be@elementMetadata@listData[["gene_name"]]
-)
-
-gene_annot_top_genes <- gene_annot[gene_annot$ensg %in% rownames(y_3$counts),]
-gene_names_matched <- gene_annot_top_genes$genename[match(rownames(y_3$counts),
-                                                          gene_annot_top_genes$ensg)]
-rownames(y_3$counts) <- gene_names_matched
 
 keep <- filterByExpr(y_3)
 y_3<- y_3[keep, ,keep.lib.sizes=FALSE]
@@ -196,7 +259,7 @@ xx_3<- x_3$table
 
 xxx_3<-xx_3[xx_3$FDR<=0.1,]
 xxx_3<-xxx_3 %>% arrange(desc(logFC))
-
+write.xlsx(xxx_3,"/Users/ieo7295/Desktop/BC_sh/results/pca_plot/Degs_paep1vspaep2.xlsx",rowNames = TRUE)
 ### PAEP1 vs SCR ###
 PAEP1vsSCR <- makeContrasts(conditionPT_shPAEP1 - conditionPT_shSCR,
                             levels = design_3)
@@ -207,7 +270,7 @@ tt_3<- t_3$table
 
 ttt_3<-tt_3[tt_3$FDR<=0.1,]
 ttt_3<-ttt_3 %>% arrange(desc(logFC))
-
+write.xlsx(ttt_3,"/Users/ieo7295/Desktop/BC_sh/results/pca_plot/Degs_paep1vscr.xlsx",rowNames = TRUE)
 ### PAEP2vsSCR ###
 PAEP2vsSCR <- makeContrasts(conditionPT_shPAEP2 - conditionPT_shSCR,
                             levels = design_3)
@@ -218,7 +281,7 @@ nn_3<- n_3$table
 
 nnn_3<-nn_3[nn_3$FDR<=0.1,]
 nnn_3<-nnn_3 %>% arrange(desc(logFC))
-
+write.xlsx(nnn_3,"/Users/ieo7295/Desktop/BC_sh/results/pca_plot/Degs_paep2vsscr.xlsx",rowNames = TRUE)
 ### Deseq2 ###
 smallestGroupSize <- 3
 keep <- rowSums(counts(dds) >= 10) >= smallestGroupSize
@@ -226,3 +289,38 @@ dds_filtered <- dds[keep,]
 dds_final <- DESeq(dds_filtered)
 rld <- rlog(dds_final, blind = TRUE)
 pca_plot <- plotPCA(rld, intgroup = "condition")
+
+### heatmap top 50DEG of contrast sh1 vs scr, sh2 vs scr , sh1 vs sh2 ###
+ttt_3$abs_logFC <- abs(ttt_3$logFC)
+xxx_3$abs_logFC <- abs(xxx_3$logFC)
+nnn_3$abs_logFC <- abs(nnn_3$logFC)
+
+
+top_50_paep1scr <- ttt_3[order(-ttt_3$abs_logFC), ][1:50, ]
+top_50_paep1paep2 <- xxx_3[order(-xxx_3$abs_logFC), ][1:50, ]
+top_50_paep2scr <- nnn_3[order(-nnn_3$abs_logFC), ][1:50, ]
+
+genes_paep1scr <- rownames(top_50_paep1scr)
+genes_paep1paep2 <- rownames(top_50_paep1paep2)
+genes_paep2scr <- rownames(top_50_paep2scr)
+common_genes_paep1scr_paep1paep2 <- intersect(genes_paep1scr, genes_paep1paep2)
+common_genes_paep1scr_paep2scr <- intersect(genes_paep1scr, genes_paep2scr)
+common_genes_paep1paep2_paep2scr <- intersect(genes_paep1paep2, genes_paep2scr)
+
+# Combine them to get genes common in at least two conditions
+common_genes_at_least_two <- unique(c(common_genes_paep1scr_paep1paep2, 
+                                      common_genes_paep1scr_paep2scr, 
+                                      common_genes_paep1paep2_paep2scr))
+expression_data <- logCPM_t[rownames(logCPM_t) %in% common_genes_at_least_two, ]
+
+
+
+color_palette<- colorRampPalette(c("blue", "white", "red"))(50)
+heatmap_plot <- pheatmap(expression_data,
+                         cluster_cols = TRUE,
+                         scale = "row",
+                         annotation_col = data.frame(condition = condition, row.names = colnames(logCPM_t)),
+                         show_rownames = TRUE,
+                         show_colnames = TRUE,
+                         color = color_palette)
+ggsave("/Users/ieo7295/Desktop/BC_sh/results/pca_plot/heatmap_PAEP.png", plot=heatmap_plot, width=12,height = 20,dpi=300)
