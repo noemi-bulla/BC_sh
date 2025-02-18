@@ -10,6 +10,7 @@ library(ggplot2)
 library(ggfortify)
 library(limma)
 library(openxlsx)
+library(readxl)
 
 sample<- factor(c("PT_shSCR_1","PT_shSCR_2","PT_shSCR_3",
                                   "PT_shSCR_4","PT_shSCR_5","PT_shPAEP1_1",
@@ -20,12 +21,12 @@ sample<- factor(c("PT_shSCR_1","PT_shSCR_2","PT_shSCR_3",
 condition <- factor(ifelse(grepl("shPAEP1", sample), "PT_shPAEP1",
                            ifelse(grepl("shPAEP2", sample), "PT_shPAEP2",
                                   "PT_shSCR")),
-                    levels = c("PT_shPAEP1", "PT_shPAEP2", "PT_shSCR"))
+                    levels  = c("PT_shSCR", "PT_shPAEP1", "PT_shPAEP2"))
 
 condition_2 <- factor(ifelse(grepl("shPAEP1", sample), "PT_shPAEP",
                              ifelse(grepl("shPAEP2", sample), "PT_shPAEP",
                                     "PT_shSCR")),
-                      levels = c("PT_shPAEP", "PT_shSCR"))
+                      levels = c("PT_shSCR", "PT_shPAEP"))
 
 cell_cycle<- c("MCM5", "PCNA", "TYMS", "FEN1", "MCM2", "MCM4",
                "RRM1", "UNG", "GINS2", "MCM6", "CDCA7", "DTL",     
@@ -66,6 +67,8 @@ y$counts
 keep <- filterByExpr(y)
 y<- y[keep, ,keep.lib.sizes=FALSE]
 y<- calcNormFactors(y)
+design<-model.matrix(~ 0 + condition)
+y<- estimateDisp(y,design=design)
 
 ### PCA ### 
 cv_function <- function(x) {
@@ -86,7 +89,7 @@ mean_cell_cycle_reads <- colMeans(cell_cycle_reads, na.rm=TRUE)
 ### no correction ###
 cv_values_cpm <- apply(logCPM, 2, cv_function)
 cv_results_cpm <- data.frame(gene = colnames(logCPM), CV = cv_values_cpm)
-top_cv_genes_cpm <- cv_results_cpm[order(-cv_results_cpm$CV), ][1:5000, ]  
+top_cv_genes_cpm <- cv_results_cpm[order(-cv_results_cpm$CV), ][1:1000, ]  
 pca_df_subset_cpm <- logCPM[, top_cv_genes_cpm$gene, drop=FALSE]  
 
 st_var_values_cpm <- apply(pca_df_subset_cpm, 2, st_var)
@@ -223,8 +226,6 @@ ggsave(filename = "/Users/ieo7295/Desktop/BC_sh/results/pca_plot/pca_5000_combat
 
 
 ### DE edgeR ###
-design<-model.matrix(~ 0 + condition_2)
-y<- estimateDisp(y,design=design)
 
 fit <- glmQLFit(y, design)
 
@@ -237,6 +238,7 @@ tt<- t$table
 
 ttt<-tt[tt$FDR<=0.1,]
 ttt<- ttt %>% arrange(desc(logFC))
+write.xlsx(ttt,"/Users/ieo7295/Desktop/BC_sh/results/pca_plot/Degs_paepvsscr.xlsx",rowNames = TRUE)
 
 ### PAEP1 vs PAEP2 ### 
 y_3 <- DGEList(counts = counts, group = condition)
@@ -282,13 +284,6 @@ nn_3<- n_3$table
 nnn_3<-nn_3[nn_3$FDR<=0.1,]
 nnn_3<-nnn_3 %>% arrange(desc(logFC))
 write.xlsx(nnn_3,"/Users/ieo7295/Desktop/BC_sh/results/pca_plot/Degs_paep2vsscr.xlsx",rowNames = TRUE)
-### Deseq2 ###
-smallestGroupSize <- 3
-keep <- rowSums(counts(dds) >= 10) >= smallestGroupSize
-dds_filtered <- dds[keep,]
-dds_final <- DESeq(dds_filtered)
-rld <- rlog(dds_final, blind = TRUE)
-pca_plot <- plotPCA(rld, intgroup = "condition")
 
 ### heatmap top 50DEG of contrast sh1 vs scr, sh2 vs scr , sh1 vs sh2 ###
 ttt_3$abs_logFC <- abs(ttt_3$logFC)
@@ -303,15 +298,29 @@ top_50_paep2scr <- nnn_3[order(-nnn_3$abs_logFC), ][1:50, ]
 genes_paep1scr <- rownames(top_50_paep1scr)
 genes_paep1paep2 <- rownames(top_50_paep1paep2)
 genes_paep2scr <- rownames(top_50_paep2scr)
-common_genes_paep1scr_paep1paep2 <- intersect(genes_paep1scr, genes_paep1paep2)
-common_genes_paep1scr_paep2scr <- intersect(genes_paep1scr, genes_paep2scr)
-common_genes_paep1paep2_paep2scr <- intersect(genes_paep1paep2, genes_paep2scr)
 
-# Combine them to get genes common in at least two conditions
-common_genes_at_least_two <- unique(c(common_genes_paep1scr_paep1paep2, 
-                                      common_genes_paep1scr_paep2scr, 
-                                      common_genes_paep1paep2_paep2scr))
-expression_data <- logCPM_t[rownames(logCPM_t) %in% common_genes_at_least_two, ]
+
+genes <-  unique(c(genes_paep1scr,genes_paep1paep2, genes_paep2scr))
+logFC_matrix <- data.frame(Gene = genes)
+
+logFC_matrix$sh1vsscr <- top_50_paep1scr$logFC[match(logFC_matrix$Gene, rownames(top_50_paep1scr))]
+logFC_matrix$sh1vssh2 <- top_50_paep1paep2$logFC[match(logFC_matrix$Gene, rownames(top_50_paep1paep2))]
+logFC_matrix$sh2vsscr <- top_50_paep2scr$logFC[match(logFC_matrix$Gene, rownames(top_50_paep2scr))]
+
+# Replace NAs with 0 (for genes not in all contrasts)
+logFC_matrix[is.na(logFC_matrix)] <- 0
+
+# Convert to matrix for heatmap
+rownames(logFC_matrix) <- logFC_matrix$Gene
+logFC_matrix <- as.matrix(logFC_matrix[, -1]) 
+
+# Heatmap plot
+heatmap_contrast<- pheatmap(logFC_matrix, 
+         cluster_cols = TRUE,
+         scale = "row",
+         show_rownames = TRUE,
+         show_colnames = TRUE,
+         color = color_palette)
 
 
 
@@ -323,4 +332,128 @@ heatmap_plot <- pheatmap(expression_data,
                          show_rownames = TRUE,
                          show_colnames = TRUE,
                          color = color_palette)
-ggsave("/Users/ieo7295/Desktop/BC_sh/results/pca_plot/heatmap_PAEP.png", plot=heatmap_plot, width=12,height = 20,dpi=300)
+ggsave("/Users/ieo7295/Desktop/BC_sh/results/pca_plot/heatmap_PAEP.png", plot=heatmap_contrast, width=12,height = 20,dpi=300)
+
+
+### heatmap paep vs scr ###
+top_genes<- ttt
+logCPM_t <- t(logCPM)
+heat_data<- logCPM_t[rownames(logCPM_t) %in% rownames(top_genes), ]
+
+
+
+color_palette<- colorRampPalette(c("blue", "white", "red"))(50)
+heatmap_plot <- pheatmap(heat_data,
+                         cluster_cols = TRUE,
+                         scale = "row",
+                         annotation_col = data.frame(condition = condition, row.names = colnames(logCPM_t)),
+                         show_rownames = TRUE,
+                         show_colnames = TRUE,
+                         color = color_palette)
+ggsave("/Users/ieo7295/Desktop/BC_sh/results/pca_plot/heatmap_PAEP_vs_SCR.png", plot=heatmap_plot, width=12,height = 10,dpi=300)
+
+
+### heatmap sh1 vs scr ###
+top_genes<-nnn_3[1:50,]
+logCPM_t <- t(logCPM)
+heat_data<- logCPM_t[rownames(logCPM_t) %in% rownames(top_genes), ]
+
+
+color_palette<- colorRampPalette(c("blue", "white", "red"))(50)
+heatmap_plot<- pheatmap(heat_data,
+                        cluster_cols = TRUE,
+                        scale="row",
+                        annotation_col=data.frame(condition=condition, row.names = colnames(heat_data)),
+                        show_rownames = TRUE,
+                        show_colnames = TRUE,
+                        color = color_palette
+)
+ggsave("/Users/ieo7295/Desktop/BC_sh/results/pca_plot/heatmap_PAEP1_vs_scr.png", plot=heatmap_plot, width=12,height = 10,dpi=300)
+
+
+
+### GRN all contrasts###
+grn_corr<- read_excel("top50_corr_tr_GRN_paep.xlsx", col_names = FALSE)
+colnames(grn_corr) <- c("genes")
+grn_chemor<-read_excel("top50_chemor_promet.xlsx", col_names = FALSE)
+colnames(grn_chemor) <- c("genes")
+
+grn_ensg_corr <- tt_3[rownames(tt_3) %in% grn_corr$genes,] %>%
+  filter(FDR <= 0.1 | PValue <= 0.1) %>% 
+  arrange(desc(logFC))  
+
+grn_ensg_chemor <- tt_3[rownames(tt_3) %in% grn_chemor$genes,] %>%
+  filter(FDR <= 0.1 | PValue <= 0.1) %>% 
+  arrange(desc(logFC)) 
+
+write.xlsx(grn_ensg_corr ,"/Users/ieo7295/Desktop/BC_sh/results/pca_plot/corr_paep1_vs_scr.xlsx", rowNames=TRUE)
+write.xlsx(grn_ensg_chemor,"/Users/ieo7295/Desktop/BC_sh/results/pca_plot/chemor_paep1_vs_scr.xlsx", rowNames=TRUE)
+
+### volcano_plot ####
+volcano_plot <- function(tt, title) {
+  
+  tt$logFC <- as.numeric(as.character(tt$logFC))
+  tt$threshold <- tt$FDR < 0.1 & abs(tt$logFC) > 1
+  
+  ggplot(tt, aes(x = logFC, y = -log10(PValue), color = threshold)) + 
+    geom_point(alpha = 0.8) + 
+    scale_color_manual(values = c("black", "red")) + 
+    theme(
+      legend.position = "none",
+      panel.background = element_rect(fill = "white"),  
+      plot.background = element_rect(fill = "white", color = NA),
+      panel.grid.major = element_line(color = "lightgrey", linewidth = 0.5), 
+      panel.grid.minor = element_line(color = "lightgrey", linewidth = 0.25)  
+    ) + 
+    ggtitle(title) + 
+    xlab("Log Fold Change") + 
+    ylab("-Log10 P-value") + 
+    theme(legend.position = "none") +
+    geom_hline(yintercept = -log10(0.05), linetype = "dotted", color = "black", linewidth = 0.5) + 
+    geom_vline(xintercept = c(-1, 1), linetype = "dotted", color = "black", linewidth = 0.5)  
+}
+
+volcano_plot <- volcano_plot(tt,title ='Differential Gene Expression')
+ggsave(plot= volcano_plot, "volcano_plot_PAEP.png", dpi=300)
+
+### Deseq2 ###
+smallestGroupSize <- 3
+keep <- rowSums(counts(dds) >= 10) >= smallestGroupSize
+
+dds_filtered <- dds[keep,]
+dds_final <- DESeq(dds_filtered)
+rld <- rlog(dds_final, blind = TRUE)
+combat_data <- ComBat(dat = assay(rld), batch = batch, mod = model)
+assay(rld) <- combat_data
+colData(dds)
+pca_plot <- plotPCA(rld, intgroup = "condition")
+ggsave(plot=pca_plot,"/Users/ieo7295/Desktop/BC_sh/results/pca_plot/deseq_pca_combat.png",dpi=300)
+
+colData(dds)$num_reads_scaled <- num_reads_scaled
+colData(dds)$mean_cell_cycle_reads <- mean_cell_cycle_reads
+num_reads_scaled <- scale(num_reads)
+model <- model.matrix(~ num_reads_scaled + mean_cell_cycle_reads)
+batch <- factor(c(rep("PT_shSCR", 5), rep("PT_shPAEP1", 5), rep("PT_shPAEP2", 4)))
+corrected_logCPM <- ComBat(dat = as.matrix(logCPM_t), batch = batch , mod = mod)
+
+
+
+###heatmap deseq2 ###
+library("RColorBrewer")
+sampleDists <- dist(logCPM)
+
+sampleDistMatrix <- as.matrix(sampleDists)
+
+rownames(sampleDistMatrix) <- paste(rownames(logCPM))
+
+colnames(sampleDistMatrix) <- paste(rownames(logCPM))
+
+colors <- colorRampPalette(rev(brewer.pal(9, "Blues")))(50) 
+
+clustering_plot <- pheatmap(sampleDistMatrix,
+                            clustering_distance_rows = sampleDists,
+                            clustering_distance_cols = sampleDists,
+                            col = colors,
+                            fontsize_col = 8,
+                            fontsize_row = 8)
+
