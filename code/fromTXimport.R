@@ -67,7 +67,7 @@ y$counts
 keep <- filterByExpr(y)
 y<- y[keep, ,keep.lib.sizes=FALSE]
 y<- calcNormFactors(y)
-design<-model.matrix(~ 0 + condition)
+design<-model.matrix(~ 0 + condition_2)
 y<- estimateDisp(y,design=design)
 
 ### PCA ### 
@@ -94,7 +94,7 @@ pca_df_subset_cpm <- logCPM[, top_cv_genes_cpm$gene, drop=FALSE]
 
 st_var_values_cpm <- apply(pca_df_subset_cpm, 2, st_var)
 
-pca<-prcomp(st_var_values_cpm, scale. = TRUE)
+pca<-prcomp(st_var_values_cpm, scale = TRUE)
 pc1_values<-pca$x[,1]
 cor_pc1_cellcycle <- cor(pc1_values, mean_cell_cycle_reads, method="pearson")
 cor_pc1_totalreads <- cor(pc1_values, num_reads, method="pearson")
@@ -103,7 +103,7 @@ pca_df <- as.data.frame(pca$x)
 pca_plot<-ggplot(pca_df, aes(x = PC1, y = PC2, color = condition)) +
   geom_point(size = 3) +  
   ggtitle("PCA of RNA-seq Samples : 5000") +
-  theme_bw() +
+  theme_bw() 
   annotate("text", x = max(pca_df$PC1), y = max(pca_df$PC2),
            label = paste("PC1 vs Cell Cycle Correlation: ",
                          round(cor_pc1_cellcycle, 2)),
@@ -125,7 +125,7 @@ remove_num_reads_effect <- function(gene_expr) {
 corrected_logCPM_num <- apply(logCPM, 2, remove_num_reads_effect)
 cv_values_cpm <- apply(corrected_logCPM_num, 2, cv_function)
 cv_results_cpm <- data.frame(gene = colnames(logCPM), CV = cv_values_cpm)
-top_cv_genes_cpm <- cv_results_cpm[order(-cv_results_cpm$CV), ][4000:5000, ]  
+top_cv_genes_cpm <- cv_results_cpm[order(-cv_results_cpm$CV), ][1:1000, ]  
 pca_df_subset_cpm <- logCPM[, top_cv_genes_cpm$gene, drop=FALSE]  
 
 st_var_values_cpm <- apply(pca_df_subset_cpm, 2, st_var)
@@ -160,7 +160,7 @@ remove_cell_cycle_effect <- function(gene_expr) {
 corrected_logCPM <- apply(logCPM, 2, remove_cell_cycle_effect)
 cv_values_cpm <- apply(corrected_logCPM, 2, cv_function)
 cv_results_cpm <- data.frame(gene = colnames(logCPM), CV = cv_values_cpm)
-top_cv_genes_cpm <- cv_results_cpm[order(-cv_results_cpm$CV), ][4000:5000, ]  
+top_cv_genes_cpm <- cv_results_cpm[order(-cv_results_cpm$CV), ][1:1000, ]  
 pca_df_subset_cpm <- logCPM[, top_cv_genes_cpm$gene, drop=FALSE]  
 
 st_var_values_cpm <- apply(pca_df_subset_cpm, 2, st_var)
@@ -390,12 +390,12 @@ write.xlsx(grn_ensg_corr ,"/Users/ieo7295/Desktop/BC_sh/results/pca_plot/corr_pa
 write.xlsx(grn_ensg_chemor,"/Users/ieo7295/Desktop/BC_sh/results/pca_plot/chemor_paep1_vs_scr.xlsx", rowNames=TRUE)
 
 ### volcano_plot ####
-volcano_plot <- function(tt, title) {
+volcano_plot <- function(xx_3, title) {
   
-  tt$logFC <- as.numeric(as.character(tt$logFC))
-  tt$threshold <- tt$FDR < 0.1 & abs(tt$logFC) > 1
+  xx_3$logFC <- as.numeric(as.character(xx_3$logFC))
+  xx_3$threshold <- xx_3$FDR < 0.1 & abs(xx_3$logFC) > 1
   
-  ggplot(tt, aes(x = logFC, y = -log10(PValue), color = threshold)) + 
+  ggplot(xx_3, aes(x = logFC, y = -log10(PValue), color = threshold)) + 
     geom_point(alpha = 0.8) + 
     scale_color_manual(values = c("black", "red")) + 
     theme(
@@ -413,8 +413,8 @@ volcano_plot <- function(tt, title) {
     geom_vline(xintercept = c(-1, 1), linetype = "dotted", color = "black", linewidth = 0.5)  
 }
 
-volcano_plot <- volcano_plot(tt,title ='Differential Gene Expression')
-ggsave(plot= volcano_plot, "volcano_plot_PAEP.png", dpi=300)
+volcano_plot <- volcano_plot(xx_3,title ='Differential Gene Expression')
+ggsave(plot= volcano_plot, "volcano_plot_PAEP1_vs_paep2.png", dpi=300)
 
 ### Deseq2 ###
 smallestGroupSize <- 3
