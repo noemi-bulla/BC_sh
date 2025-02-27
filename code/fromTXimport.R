@@ -67,7 +67,7 @@ y$counts
 keep <- filterByExpr(y)
 y<- y[keep, ,keep.lib.sizes=FALSE]
 y<- calcNormFactors(y)
-design<-model.matrix(~ 0 + condition_2)
+design<-model.matrix(~ 0 + condition)
 y<- estimateDisp(y,design=design)
 
 ### PCA ### 
@@ -89,7 +89,7 @@ mean_cell_cycle_reads <- colMeans(cell_cycle_reads, na.rm=TRUE)
 ### no correction ###
 cv_values_cpm <- apply(logCPM, 2, cv_function)
 cv_results_cpm <- data.frame(gene = colnames(logCPM), CV = cv_values_cpm)
-top_cv_genes_cpm <- cv_results_cpm[order(-cv_results_cpm$CV), ][1:1000, ]  
+top_cv_genes_cpm <- cv_results_cpm[order(-cv_results_cpm$CV), ][1000:2000, ]  
 pca_df_subset_cpm <- logCPM[, top_cv_genes_cpm$gene, drop=FALSE]  
 
 st_var_values_cpm <- apply(pca_df_subset_cpm, 2, st_var)
@@ -102,7 +102,7 @@ pca_df <- as.data.frame(pca$x)
 
 pca_plot<-ggplot(pca_df, aes(x = PC1, y = PC2, color = condition)) +
   geom_point(size = 3) +  
-  ggtitle("PCA of RNA-seq Samples : 5000") +
+  ggtitle("PCA of RNA-seq Samples : 2000") +
   theme_bw() 
   annotate("text", x = max(pca_df$PC1), y = max(pca_df$PC2),
            label = paste("PC1 vs Cell Cycle Correlation: ",
@@ -113,8 +113,15 @@ pca_plot<-ggplot(pca_df, aes(x = PC1, y = PC2, color = condition)) +
                          round(cor_pc1_totalreads, 2)),
            hjust = 1, vjust = 1, size = 5, color = "black")
 
-ggsave(filename = "/Users/ieo7295/Desktop/BC_sh/results/pca_plot/pca_5000_2.png", plot=pca_plot,width= 9, height= 6,dpi=300)
-
+ggsave(filename = "/Users/ieo7295/Desktop/BC_sh/results/pca_plot/pca_2500.png", plot=pca_plot,width= 9, height= 6,dpi=300)
+### extract PC for GSEA ###
+pca_loadings <- pca_df$rotation[, 1:2]  
+loadings_df <- data.frame(
+  gene = rownames(pca_loadings),
+  PC1_loading = pca_loadings[, 1],
+  PC2_loading = pca_loadings[, 2]
+)
+write.csv(loadings_df, "pca_loadings.csv", row.names = FALSE)
 
 ### regression num_reads
 remove_num_reads_effect <- function(gene_expr) {
@@ -336,7 +343,7 @@ ggsave("/Users/ieo7295/Desktop/BC_sh/results/pca_plot/heatmap_PAEP.png", plot=he
 
 
 ### heatmap paep vs scr ###
-top_genes<- ttt
+top_genes<- ttt_3
 logCPM_t <- t(logCPM)
 heat_data<- logCPM_t[rownames(logCPM_t) %in% rownames(top_genes), ]
 
