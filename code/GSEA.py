@@ -1,6 +1,7 @@
 import pandas as pd
 import gseapy as gp
 import gc
+import os
 import pandas as pd 
 from gseapy import prerank
 import seaborn as sns
@@ -19,7 +20,7 @@ class GSEAAnalysis:
         self.organism = organism
         self.GSEA = {}
 
-    def compute_GSEA(self, covariate='PC2_loading', collection='GO_Biological_Process_2023'):
+    def compute_GSEA(self, covariate='PC1_loading', collection='GO_Biological_Process_2023'):
         """
         Perform GSEA using PCA loadings (e.g., PC1 or PC2) as covariate.
         """
@@ -60,7 +61,9 @@ class GSEAAnalysis:
         
         return filtered_df
 
-pca_loadings_df = pd.read_csv("pca_loadings.csv")
+path="/Users/ieo7295/Desktop/BC_sh/data"
+pca_loadings_df = os.path.join(path,"pca_loadings.csv")
+pca_loadings_df=pd.read
 gsea_analysis = GSEAAnalysis(pca_loadings_df)
 
 #Run the GSEA
