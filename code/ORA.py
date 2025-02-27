@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 import gc
+import os
 import networkx as nx
 from gseapy import enrichr, prerank
 
@@ -51,17 +52,18 @@ class ORAAnalysis:
 
         return filtered_df 
 
-
-df_deg=pd.read_excel("PT_shSCRvsPT_shPAEP_FDR.xlsx")
+file_path="/Users/ieo7295/Desktop/BC_sh/results/pca_plot"
+file=os.path.join(file_path,"Degs_paepvsscr.xlsx")
+df_deg=pd.read_excel(file)
 df_deg.rename(columns={'Unnamed: 0':'Gene'}, inplace=True)
 ora_analysis= ORAAnalysis(df_deg)
 
 ora_results = ora_analysis.compute_ORA(gene_column='Gene')
 # ora_results_2=ora_analysis.computeORA(covariate='PC2_loading', collection='GO_Biological_Process_2023')
+ora_results.to_excel(os.path.join(file_path, "ORA_results_deg.xlsx"))
 
 
-
-def plot_ORA_bar(ora_results, title="Top Enriched Pathways", top_n=10):
+def plot_ORA_bar(ora_results, title="Top Enriched Pathways", top_n=50):
     """
     Plots a bar chart of the top enriched pathways based on Adjusted P-value.
 
@@ -73,7 +75,7 @@ def plot_ORA_bar(ora_results, title="Top Enriched Pathways", top_n=10):
     # Select top pathways
     df_plot = ora_results.nsmallest(top_n, 'Adjusted P-value')
 
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(13, 9))
     sns.barplot(
         data=df_plot,
         y=df_plot.index,
@@ -81,11 +83,11 @@ def plot_ORA_bar(ora_results, title="Top Enriched Pathways", top_n=10):
         palette='viridis'
     )
     
-    plt.xscale('log')  # Log scale for better visualization of small p-values
-    plt.xlabel('Adjusted P-value (log scale)')
+    plt.xlabel('Adjusted P-value')
     plt.ylabel('Pathway')
-    plt.title(title)
-    plt.gca().invert_yaxis()  # Invert for better readability
+    plt.xlim(left=0.07)
+    plt.title(title) 
+    plt.tight_layout()
     plt.show()
 
 # Plot the ORA results
@@ -93,7 +95,7 @@ plot_ORA_bar(ora_results)
 
 
 
-def plot_ORA_dot(ora_results, title="Enrichment Dot Plot", top_n=10):
+def plot_ORA_dot(ora_results, title="Enrichment Dot Plot", top_n=50):
     """
     Plots a dot plot of enriched pathways showing adjusted P-value and gene overlap.
 
@@ -104,7 +106,7 @@ def plot_ORA_dot(ora_results, title="Enrichment Dot Plot", top_n=10):
     """
     df_plot = ora_results.nsmallest(top_n, 'Adjusted P-value')
     
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(14, 9))
     scatter = plt.scatter(
         x=df_plot['Adjusted P-value'],
         y=df_plot.index,
@@ -120,10 +122,12 @@ def plot_ORA_dot(ora_results, title="Enrichment Dot Plot", top_n=10):
     plt.colorbar(scatter, label="Log10(Adjusted P-value)")
     plt.title(title)
     plt.gca().invert_yaxis()
+    plt.tight_layout()
     plt.show()
-
+    plt.savefig(os.path.join(file_path, "ORA_deg_paepvsscr.png"),dpi=300)
 # Plot dot plot for ORA results
 plot_ORA_dot(ora_results)
+
 
 
 
@@ -131,10 +135,6 @@ plot_ORA_dot(ora_results)
 def plot_enrichment_map(ora_results, top_n=50):
     """
     Creates a network graph of enriched pathways.
-
-    Parameters:
-    - ora_results: DataFrame with ORA results
-    - top_n: Number of top pathways to include
     """
     df_plot = ora_results.nsmallest(top_n, 'Adjusted P-value')
 
