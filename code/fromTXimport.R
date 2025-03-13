@@ -125,7 +125,7 @@ scatter_pc<- ggplot(plot_df, aes(x= PC1, y= LibrarySize, color=Condition)) +
   theme_minimal() +
   scale_color_manual(values = palette_14) +
   theme(legend.title = element_text(size=12), legend.text = element_text(size=10))
-ggsave(filename = "/Users/ieo7295/Desktop/BC_sh/results/res_final/scatter_PC1_librarySize.png", plot=scatter_pc, width= 4, height= 6,dpi=300)
+ggsave(filename = "/Users/ieo7295/Desktop/BC_sh/results/res_final/scatter_PC1_librarySize.png", plot=scatter_pc, width= 6, height= 6,dpi=300)
 
 #plot PCA
 pca_var <- summary(pca)$importance[2, ] 

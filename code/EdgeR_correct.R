@@ -311,7 +311,7 @@ ggsave(plot= volcano_plot, "volcano_plot_PAEP.png", dpi=300)
 
 ### heatmap ###
 
-top_genes <- ttt #25 top DEGs
+top_genes <- nnn_3#25 top DEGs
 logCPM_t <- t(logCPM)
 heat_data<- logCPM_t[rownames(logCPM_t) %in% rownames(top_genes), ]
 

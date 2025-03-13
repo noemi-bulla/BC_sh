@@ -9,57 +9,58 @@ import networkx as nx
 from gseapy import enrichr, prerank
 
 class ORAAnalysis:
-    def __init__(self, df_deg, organism='human'):
-        self.df_deg= df_deg
+    def __init__(self, subset_deg, organism='human'):
+        self.subset_deg= subset_deg
         self.organism = organism
         self.ORA_results = {}
 
 
-    def compute_ORA(self, key='ORA_results', gene_column='Gene', 
-        collection='GO_Biological_Process_2023', n_out=50):
+    def compute_ORA(self, key='ORA_results', gene_column='Gene',
+        collection='GO_Biological_Process_2023', n_out=100):
         """
         Perform ORA (Over-Representation Analysis)
         """
-        if gene_column not in self.df_deg.columns:
+        if gene_column not in self.subset_deg.columns:
             raise ValueError(f"Column '{gene_column}' not found in dataframe")
         
-        gene_list = self.df_deg[gene_column].dropna().tolist()
-        
-        # Ensure we have enough genes for ORA
-        if len(gene_list) < 5:
-            raise ValueError("ORA requires at least 5 genes for meaningful results.")
+        gene_list = self.subset_deg[gene_column].dropna().tolist()
 
         results = enrichr(
             gene_list=gene_list,
             gene_sets=[collection],
             organism=self.organism, 
             outdir=None, 
-        ).results
 
+        ).results
+        results.to_excel(os.path.join(file_path, "ORA_results_deg_rm_out_top50_bottom50.xlsx"))
         df = results.loc[:, 
-            [ 'Term', 'Overlap', 'Adjusted P-value', 'Genes' ]
+            [ 'Term','Overlap','Adjusted P-value', 'Genes' ]
         ]
 
-        # Select top `n_out` pathways
+  
         filtered_df = df.nsmallest(n_out, 'Adjusted P-value')
         filtered_df = filtered_df.set_index('Term')
 
-        # Store results
+ 
         self.ORA_results[key] = filtered_df
 
-        # Free memory
+ 
         gc.collect()
 
         return filtered_df 
 
-file_path="/Users/ieo7295/Desktop/BC_sh/results/pca_plot"
-file=os.path.join(file_path,"Degs_paepvsscr.xlsx")
+file_path="/Users/ieo7295/Desktop/BC_sh/results/res_final"
+file=os.path.join(file_path,"Degs_paep_vs_scr_rm_out.xlsx")
+file_genes=os.path.join(file_path,"allgenes_paepvsscr.xlsx")
 df_deg=pd.read_excel(file)
+df_genes=pd.read_excel(file_genes)
 df_deg.rename(columns={'Unnamed: 0':'Gene'}, inplace=True)
-ora_analysis= ORAAnalysis(df_deg)
+df_genes.rename(columns={'Unnamed: 0':'Gene'}, inplace=True)
+subset_deg= pd.concat([df_deg.head(50), df_deg.tail(50)])
+ora_analysis= ORAAnalysis(subset_deg)
+
 
 ora_results = ora_analysis.compute_ORA(gene_column='Gene')
-# ora_results_2=ora_analysis.computeORA(covariate='PC2_loading', collection='GO_Biological_Process_2023')
 ora_results.to_excel(os.path.join(file_path, "ORA_results_deg.xlsx"))
 
 
@@ -67,10 +68,6 @@ def plot_ORA_bar(ora_results, title="Top Enriched Pathways", top_n=50):
     """
     Plots a bar chart of the top enriched pathways based on Adjusted P-value.
 
-    Parameters:
-    - ora_results: DataFrame with ORA results (must contain 'Adjusted P-value')
-    - title: Title of the plot
-    - top_n: Number of top pathways to show
     """
     # Select top pathways
     df_plot = ora_results.nsmallest(top_n, 'Adjusted P-value')
@@ -85,9 +82,10 @@ def plot_ORA_bar(ora_results, title="Top Enriched Pathways", top_n=50):
     
     plt.xlabel('Adjusted P-value')
     plt.ylabel('Pathway')
-    plt.xlim(left=0.07)
+    plt.xlim(left=0.04)
     plt.title(title) 
     plt.tight_layout()
+    plt.savefig(os.path.join(file_path, "ORA_deg_paep_vs_scr_rm_out_top50_bottom50_plotbar.png"),dpi=300)
     plt.show()
 
 # Plot the ORA results
@@ -98,12 +96,9 @@ plot_ORA_bar(ora_results)
 def plot_ORA_dot(ora_results, title="Enrichment Dot Plot", top_n=50):
     """
     Plots a dot plot of enriched pathways showing adjusted P-value and gene overlap.
-
-    Parameters:
-    - ora_results: DataFrame with ORA results (must contain 'Adjusted P-value' & 'Overlap')
-    - title: Title of the plot
-    - top_n: Number of top pathways to show
+    
     """
+
     df_plot = ora_results.nsmallest(top_n, 'Adjusted P-value')
     
     plt.figure(figsize=(14, 9))
@@ -111,20 +106,20 @@ def plot_ORA_dot(ora_results, title="Enrichment Dot Plot", top_n=50):
         x=df_plot['Adjusted P-value'],
         y=df_plot.index,
         s=df_plot['Overlap'].apply(lambda x: int(x.split('/')[0])) * 50,  # Bubble size = overlapping genes
-        c=np.log10(df_plot['Adjusted P-value']),
+        c=df_plot['Adjusted P-value'],
         cmap='coolwarm',
         edgecolors='black'
     )
     
-    plt.xscale('log')
-    plt.xlabel('Adjusted P-value (log scale)')
+    plt.xlabel('Adjusted P-value')
     plt.ylabel('Pathway')
-    plt.colorbar(scatter, label="Log10(Adjusted P-value)")
+    plt.colorbar(scatter, label="Adjusted P-value")
     plt.title(title)
     plt.gca().invert_yaxis()
     plt.tight_layout()
+    plt.savefig(os.path.join(file_path, "ORA_deg_paep_vs_scr_rm_out_top50_bottom50_dotplot.png"),dpi=300)
     plt.show()
-    plt.savefig(os.path.join(file_path, "ORA_deg_paepvsscr.png"),dpi=300)
+
 # Plot dot plot for ORA results
 plot_ORA_dot(ora_results)
 
@@ -141,8 +136,8 @@ def plot_enrichment_map(ora_results, top_n=50):
     G = nx.Graph()
     
     for _, row in df_plot.iterrows():
-        pathway = row.name  # Pathway name
-        genes = row['Genes'].split(";")  # Split gene names
+        pathway = row.name  
+        genes = row['Genes'].split(";")  
         
         G.add_node(pathway, type='pathway')
         
