@@ -16,7 +16,7 @@ class ORAAnalysis:
 
 
     def compute_ORA(self, key='ORA_results', gene_column='Gene',
-        collection='GO_Biological_Process_2023', n_out=100):
+        collection='MSigDB_Hallmark_2020', n_out=200):
         """
         Perform ORA (Over-Representation Analysis)
         """
@@ -50,18 +50,19 @@ class ORAAnalysis:
         return filtered_df 
 
 file_path="/Users/ieo7295/Desktop/BC_sh/results/res_final"
-file=os.path.join(file_path,"Degs_paep_vs_scr_rm_out.xlsx")
+file=os.path.join(file_path,"Degs_paep_vs_scr_rm_out_thrb_regulon.xlsx")
 file_genes=os.path.join(file_path,"allgenes_paepvsscr.xlsx")
 df_deg=pd.read_excel(file)
 df_genes=pd.read_excel(file_genes)
 df_deg.rename(columns={'Unnamed: 0':'Gene'}, inplace=True)
 df_genes.rename(columns={'Unnamed: 0':'Gene'}, inplace=True)
-subset_deg= pd.concat([df_deg.head(50), df_deg.tail(50)])
+#subset_deg= pd.concat([df_deg.head(50), df_deg.tail(50)])
+subset_deg=df_deg
 ora_analysis= ORAAnalysis(subset_deg)
 
 
 ora_results = ora_analysis.compute_ORA(gene_column='Gene')
-ora_results.to_excel(os.path.join(file_path, "ORA_results_deg.xlsx"))
+ora_results.to_excel(os.path.join(file_path, "ORA_results_thrb_regulon_shPAEPvsSCR_hallmark.xlsx"))
 
 
 def plot_ORA_bar(ora_results, title="Top Enriched Pathways", top_n=50):
@@ -85,8 +86,8 @@ def plot_ORA_bar(ora_results, title="Top Enriched Pathways", top_n=50):
     plt.xlim(left=0.04)
     plt.title(title) 
     plt.tight_layout()
-    plt.savefig(os.path.join(file_path, "ORA_deg_paep_vs_scr_rm_out_top50_bottom50_plotbar.png"),dpi=300)
-    plt.show()
+    plt.savefig(os.path.join(file_path, "ORA_deg_paep_vs_scr_rm_out_thrbregulon_plotbar.png"),dpi=300)
+
 
 # Plot the ORA results
 plot_ORA_bar(ora_results)
@@ -117,8 +118,8 @@ def plot_ORA_dot(ora_results, title="Enrichment Dot Plot", top_n=50):
     plt.title(title)
     plt.gca().invert_yaxis()
     plt.tight_layout()
-    plt.savefig(os.path.join(file_path, "ORA_deg_paep_vs_scr_rm_out_top50_bottom50_dotplot.png"),dpi=300)
-    plt.show()
+    plt.savefig(os.path.join(file_path, "ORA_deg_paep_vs_scr_rm_out_thrbregulon_dotplot_hallmark.png"),dpi=300)
+
 
 # Plot dot plot for ORA results
 plot_ORA_dot(ora_results)

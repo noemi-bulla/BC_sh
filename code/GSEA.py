@@ -8,7 +8,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib
 import matplotlib.pyplot as plt
-from plotting_utils._plotting import *
+from plotting_utils.plotting_base import *
 matplotlib.use('macOSX')
 
 class GSEAAnalysis:
@@ -102,14 +102,14 @@ stem_plot(
 format_ax(axs[1], title=f'PC{i} loadings', xlabel='Loadings')
 fig.suptitle(f'PC{i}, scaled layer, original representation')
 fig.tight_layout()
-fig.savefig(("GSEA_PC1.png"),dpi=300)
+#fig.savefig((".png"),dpi=300)
 plt.show()
 
-
+gsea_results=df_deg
 
 ### GSEA for regulatory network genes ###
 
-def network_gene_gsea(df_deg ,collection='GO_Biological_Process_2023'):
+def gene_gsea(df_deg ,collection='GO_Biological_Process_2023'):
 
      df_deg['gene'] = df_deg['gene'].astype(str)
 
@@ -142,12 +142,13 @@ def network_gene_gsea(df_deg ,collection='GO_Biological_Process_2023'):
      return filtered_df
 
 
-file_path="/Users/ieo7295/Desktop/BC_sh/results/res_no_out"
+file_path="/Users/ieo7295/Desktop/BC_chemo_reproducibility"
 alt_file_path="/Users/ieo7295/Desktop/BC_sh/results/pca_plot"
-file=os.path.join(file_path,"Degs_pscrvspaep.xlsx")
+file=os.path.join(file_path,'results', 'MDA','Gsea_promet_AC_vs_promet_NT.csv')
 alt_file=os.path.join(file_path,"Degs_paepvsscr_pvalue.xlsx")
-df_deg=pd.read_excel(file)
+df_deg=pd.read_csv(file)
 df_deg= df_deg.rename(columns={'Unnamed: 0':'gene'})
+df_deg=df_deg.drop(columns={'Unnamed: 0'})
 df_deg_pvalue=pd.read_excel(alt_file)
 df_deg_pvalue=df_deg_pvalue.rename(columns={'Unnamed: 0':'gene'})
 
@@ -157,7 +158,7 @@ network_gene_2= network_gene_2.rename(columns={'Unnamed: 0':'gene'})
 network_gene_3=pd.read_csv("PAEP2vsSCR_gsea.csv")
 network_gene_3= network_gene_3.rename(columns={'Unnamed: 0':'gene'})
 
-gsea = network_gene_gsea(df_deg,collection='GO_Biological_Process_2023')
+gsea = gene_gsea(df_deg,collection='GO_Biological_Process_2023')
 gsea.to_excel(os.path.join(file_path,"PAEPvsshSCR_gsea.xlsx"))
 gsea.to_excel("PAEP1vsSCR_gsea.xlsx", index=True)
 gsea.to_excel("PAEP2vsSCR_gsea.xlsx", index=True)
@@ -181,9 +182,9 @@ df_pc1=pd.read_excel('GSEA_PC1.xlsx')
 df_pc2=pd.read_excel('GSEA_PC2.xlsx')
 
 
-def plot_gsea_results(gsea, title='Gene Set Enrichment Analysis'):
-    df = pd.read_excel(gsea, index_col=0)
-    
+def plot_gsea_results(df_deg, title='Gene Set Enrichment Analysis'):
+    #df = pd.read_excel(df_deg, index_col=0)
+    df=df_deg
     df = df.reindex(df['NES'].head(50))
     
     plt.figure(figsize=(10, 6))
@@ -198,11 +199,11 @@ def plot_gsea_results(gsea, title='Gene Set Enrichment Analysis'):
     plt.show()
 
 # Example usage
-plot_gsea_results('GSEA_.xlsx', title='GSEA Results for PC1 Loading')
-
-def plot_GSEA_dot(gsea, title="Enrichment Dot Plot", top_n=50):
-    gsea['Adjusted P-value'] = pd.to_numeric(gsea['Adjusted P-value'], errors='coerce')
-    df_plot = gsea.nsmallest(top_n, 'Adjusted P-value')
+plot_gsea_results(df_deg, title='GSEA Results for PC1 Loading')
+df_deg= df_deg.set_index('Term')
+def plot_GSEA_dot(df_deg, title="Enrichment Dot Plot", top_n=50):
+    df_deg['Adjusted P-value'] = pd.to_numeric(df_deg['Adjusted P-value'], errors='coerce')
+    df_plot = df_deg.nsmallest(top_n, 'Adjusted P-value')
     
     plt.figure(figsize=(14, 9))
     scatter = plt.scatter(
@@ -223,4 +224,4 @@ def plot_GSEA_dot(gsea, title="Enrichment Dot Plot", top_n=50):
     plt.show()
 
 # Plot dot plot for ORA results
-plot_GSEA_dot(gsea)
+plot_GSEA_dot(df_deg)

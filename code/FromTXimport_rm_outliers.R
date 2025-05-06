@@ -50,7 +50,7 @@ cell_cycle<- c("MCM5", "PCNA", "TYMS", "FEN1", "MCM2", "MCM4",
 
 sampletable <- data.frame(
   sample = sample,
-  condition = condition_2 
+  condition = condition
 )
 
 files<- file.path(sample, "quant.sf")
@@ -301,7 +301,70 @@ tt<- t$table
 
 ttt<-tt[tt$FDR<=0.1,]
 ttt<- ttt %>% arrange(desc(logFC))
-write.xlsx(ttt,"/Users/ieo7295/Desktop/BC_sh/results/res_final/Degs_paep_vs_scr_rm_out.xlsx",rowNames = TRUE)
+write.xlsx(genes_deg,"/Users/ieo7295/Desktop/BC_sh/results/res_final/Degs_paep_vs_scr_rm_out_thrb_regulon.xlsx",rowNames = TRUE)
+
+#genes regulon THRB 
+genes<- c('TP63', 'EXD2', 'USP44', 'CHI3L2', 'RAB33A', 'THRB', 'UCP3', 
+           'HMGCLL1', 'ATP2A3', 'ANKS1A', 'GBX2', 'SCN2A', 'PAEP', 'HR', 
+           'ARHGAP31', 'FHDC1', 'ANGPT1', 'NOD1')
+logCPM <- t(cpm(y, log=TRUE, prior.count = 2))
+logCPM_t<- t(logCPM)
+write.csv(logCPM_t,'/Users/ieo7295/Desktop/BC_chemo_reproducibility/data/MDA/bulk_expr_matr.csv')
+#TEST GSVA
+if (!requireNamespace("GSVA", quietly = TRUE)) {
+  BiocManager::install("GSVA")
+}
+library(GSVA)
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+BiocManager::install(version = "3.21")
+gene_sets<- list(my_regulon= genes)
+options(matrixStats.useNames = TRUE)
+scores <- gsva(logCPM_t, gene_sets,method= "ssgsea", ssgsea.norm=TRUE)
+
+genes_deg<- tt[rownames(tt) %in% genes, ]
+sample_scores <- colMeans(genes_deg)
+
+sample_info <- data.frame(
+  Sample = names(sample_scores),
+  ActivityScore = sample_scores,
+  Condition = ifelse(grepl("shSCR", names(sample_scores)), "shSCR", "shPAEP")
+)
+write.csv(sample_info,'/Users/ieo7295/Desktop/BC_chemo_reproducibility/results/MDA/thrb_genes_expression_bulk.csv')
+
+# Plot: Boxplot + Wilcoxon
+library(ggpubr)
+ggboxplot(sample_info, x = "Condition", y = "ActivityScore", add = "jitter") +
+  stat_compare_means(method = "wilcox.test") +
+  theme_minimal()
+
+
+
+#using pca to give THRB regulon activity score
+pca_result <- prcomp(t(heat_data))
+regulon_activity_scores_pca <- pca_result$x[, 1]  
+regulon_activity_scores_pca_normalized <- scale(regulon_activity_scores_pca)
+activity_data <- data.frame(ActivityScore = regulon_activity_scores_pca_normalized, Condition = condition_2)
+ggplot(activity_data, aes(x = condition_2, y = ActivityScore)) +
+  geom_boxplot() +
+  labs(x = "Condition", y = "Regulon Activity Score (Normalized)") +
+  theme_minimal()
+
+#Regulon enrichment
+
+
+
+
+library(ggpubr)
+
+my_comparisons <- list(
+  c("shSCR", "shPAEP1"),
+  c("shSCR", "shPAEP2"),
+  c("shPAEP1", "shPAEP2")
+)
+activity_data$Condition <- factor(activity_data$Condition, levels = c("shSCR", "shPAEP1", "shPAEP2"))
+write.csv(,"/Users/ieo7295/Desktop/BC_chemo_reproducibility/results/MDA/enrichment_thrb_sh.csv")
+
 
 
 #PAEPvsSCR
@@ -313,7 +376,7 @@ kk<-k$table
 
 kkk<-kk[kk$FDR<=0.1,]
 kkk<- kkk %>% arrange(desc(logFC))
-write.xlsx(kkk,"/Users/ieo7295/Desktop/BC_sh/results/res_final/Degs_scr_vs_paep_rm_out.xlsx",rowNames = TRUE)
+write.xlsx(kk,"/Users/ieo7295/Desktop/BC_sh/results/res_final/Degs_scr_vs_paep_rm_out.xlsx",rowNames = TRUE)
 
 ### PAEP1 vs PAEP2 ### 
 y_3 <- DGEList(counts = counts, group = condition_2)

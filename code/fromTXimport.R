@@ -168,7 +168,7 @@ corrected_logCPM_num <- apply(logCPM, 2, remove_num_reads_effect)
 cv_values_cpm <- apply(corrected_logCPM_num, 2, cv_function)
 cv_results_cpm <- data.frame(gene = colnames(logCPM), CV = cv_values_cpm)
 top_cv_genes_cpm <- cv_results_cpm[order(-cv_results_cpm$CV), ][1:1000, ]  
-pca_df_subset_cpm <- logCPM[, top_cv_genes_cpm$gene, drop=FALSE]  
+pca_df_subset_cpm <- corrected_logCPM_num[, top_cv_genes_cpm$gene, drop=FALSE]  
 
 st_var_values_cpm <- apply(pca_df_subset_cpm, 2, st_var)
 
@@ -197,7 +197,7 @@ pca_plot<-ggplot(pca_df, aes(x = PC1, y = PC2, color = condition)) +
                          round(cor_pc1_totalreads, 2)),
            hjust = 1, vjust = 1, size = 5, color = "black")
 
-ggsave(filename = "/Users/ieo7295/Desktop/BC_sh/results/res_final/pca_1000_num_reads.png", plot=pca_plot,width= 9, height= 6,dpi=300)
+ggsave(filename = "/Users/ieo7295/Desktop/BC_sh/results/res_final/pca_1000_num_reads_corrected.png", plot=pca_plot,width= 9, height= 6,dpi=300)
 
 ### regression cell_cycle ###
 remove_cell_cycle_effect <- function(gene_expr) {
@@ -209,7 +209,7 @@ corrected_logCPM <- apply(logCPM, 2, remove_cell_cycle_effect)
 cv_values_cpm <- apply(corrected_logCPM, 2, cv_function)
 cv_results_cpm <- data.frame(gene = colnames(logCPM), CV = cv_values_cpm)
 top_cv_genes_cpm <- cv_results_cpm[order(-cv_results_cpm$CV), ][1:1000, ]  
-pca_df_subset_cpm <- logCPM[, top_cv_genes_cpm$gene, drop=FALSE]  
+pca_df_subset_cpm <- corrected_logCPM[, top_cv_genes_cpm$gene, drop=FALSE]  
 
 st_var_values_cpm <- apply(pca_df_subset_cpm, 2, st_var)
 
@@ -238,7 +238,7 @@ pca_plot<-ggplot(pca_df, aes(x = PC1, y = PC2, color = condition)) +
                          round(cor_pc1_totalreads, 2)),
            hjust = 1, vjust = 1, size = 5, color = "black")
 
-ggsave(filename = "/Users/ieo7295/Desktop/BC_sh/results/res_final/pca_5000_cell_cycle.png", plot=pca_plot,width= 9, height= 6,dpi=300)
+ggsave(filename = "/Users/ieo7295/Desktop/BC_sh/results/res_final/pca_5000_cell_cycle_corrected.png", plot=pca_plot,width= 9, height= 6,dpi=300)
 
 
 ### combat ###
@@ -252,7 +252,7 @@ cv_values_cpm <- apply(corrected_logCPM_t, 2, cv_function)
 
 cv_results_cpm <- data.frame(gene = colnames(logCPM), CV = cv_values_cpm)
 top_cv_genes_cpm <- cv_results_cpm[order(-cv_results_cpm$CV), ][1:1000, ]  
-pca_df_subset_cpm <- logCPM[, top_cv_genes_cpm$gene, drop=FALSE]  
+pca_df_subset_cpm <- corrected_logCPM_t[, top_cv_genes_cpm$gene, drop=FALSE]  #logCPM
 
 st_var_values_cpm <- apply(pca_df_subset_cpm, 2, st_var)
 
